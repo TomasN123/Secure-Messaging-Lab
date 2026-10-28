@@ -1,0 +1,56 @@
+# --- Terraform ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+crash.log
+crash.*.log
+.terraform.tfstate.lock.info
+
+# --- Kľúče a certifikáty ---
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+id_ecdsa
+id_*
+!id_*.pub
+
+# --- Secrets a env súbory ---
+.env
+.env.*
+*.env
+!.env.example
+.aws/
+
+# --- Výstupy Vault/Keycloak (init, recovery kľúče, tokeny) ---
+vault-init*
+*init-output*
+*recovery-keys*
+*root-token*
+*unseal-keys*
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.pytest_cache/
+.mypy_cache/
+
+# --- Lokálne dáta a editory ---
+compose/data/
+.idea/
+.vscode/
