@@ -7,13 +7,13 @@ variable "region" {
 variable "instance_type" {
   type        = string
   description = "EC2 instance"
-  default     = "t3.small"
+  default     = "t3.large"
 }
 
 variable "ami" {
   type        = string
   description = "AMI of EC2"
-  default     = "ami-01e082ac2f79f3918"
+  default     = "ami-048b204bd75ee6fdd"
 }
 
 variable "domain_name" {
@@ -24,6 +24,10 @@ variable "domain_name" {
 
 variable "email" {
   type        = string
-  description = "Email for SNS"
+  description = "Email"
   default     = "3novotnytomas@gmail.com"
+}
+variable "admin_cidr" {
+  type        = string
+  description = "IP for port 22"
 }
