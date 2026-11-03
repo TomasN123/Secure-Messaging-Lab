@@ -1,0 +1,21 @@
+
+services:
+  traefik:
+    image: traefik:v3.7
+    container_name: traefik
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik.yaml:/etc/traefik/traefik.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /data/traefik:/acme
+
+  whoami:
+    image: traefik/whoami:latest
+    container_name: whoami
+    labels:
+      -  traefik.http.routers.whoami.rule=Host(`traefik.cloud-telemetry.click`)
+      -  traefik.http.routers.whoami.tls.certresolver=myresolver
+      -  traefik.http.routers.whoami.entrypoints=websecure
+      -  traefik.enable=true
