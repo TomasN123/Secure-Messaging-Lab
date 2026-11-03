@@ -97,6 +97,18 @@ resource "aws_instance" "lab_ec2" {
   vpc_security_group_ids = [aws_security_group.lab-sg.id]
   subnet_id = aws_subnet.lab_subnet.id
   iam_instance_profile = aws_iam_instance_profile.lab_profile.name
+  user_data_replace_on_change = true
+
+  user_data = <<EOF
+#! /bin/bash
+sudo dnf update -y
+sudo dnf install -y docker
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+EOF
+
   root_block_device {
     encrypted = true
     volume_type = "gp3"
@@ -190,4 +202,131 @@ policy = jsonencode({
     "Resource": aws_kms_key.lab_kms_key.arn
 }]
 })
+}
+
+resource "terraform_data" "deploy" {
+  triggers_replace = [
+    aws_instance.lab_ec2.id,
+    aws_volume_attachment.lab_ebs_attachment.id
+  ]
+
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file(pathexpand("~/.ssh/aws-lab"))
+    host        = aws_eip.lab_eip.public_ip
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+
+      <<-EOT
+      for i in $(seq 1 60); do
+        if [ -b /dev/xvdf ] || [ -b /dev/sdf ]; then
+          break
+        fi
+        sleep 2
+      done
+
+      if [ ! -b /dev/xvdf ] && [ ! -b /dev/sdf ]; then
+        echo "EBS device not found"
+        exit 1
+      fi
+      EOT
+      ,
+
+      "DEVICE=$([ -b /dev/xvdf ] && echo /dev/xvdf || echo /dev/sdf)",
+
+      # Format only if filesystem does not exist
+      "if ! sudo blkid $DEVICE >/dev/null 2>&1; then sudo mkfs.xfs -f $DEVICE; fi",
+
+      "sudo mkdir -p /data",
+
+      # Get UUID
+      "UUID=$(sudo blkid -s UUID -o value $DEVICE)",
+
+      # Validate UUID
+      "[ -n \"$UUID\" ] || { echo 'Unable to determine UUID'; exit 1; }",
+
+      # Add fstab record only once
+      "grep -q \"$UUID\" /etc/fstab || echo \"UUID=$UUID /data xfs defaults,nofail,nodev,nosuid 0 2\" | sudo tee -a /etc/fstab",
+
+      # Mount filesystem
+      "sudo mount -a",
+
+      "sudo mkdir -p /data/traefik",
+      "sudo chmod 700 /data/traefik",
+
+      # Wait for Docker (max 5 minutes)
+      <<-EOT
+      for i in $(seq 1 60); do
+        if sudo docker info >/dev/null 2>&1; then
+          break
+        fi
+        sleep 5
+      done
+
+      if ! sudo docker info >/dev/null 2>&1; then
+        echo "Docker daemon not ready"
+        exit 1
+      fi
+      EOT
+      ,
+
+      # Wait for Docker Compose (max 5 minutes)
+      <<-EOT
+      for i in $(seq 1 60); do
+        if sudo /usr/local/bin/docker-compose version >/dev/null 2>&1; then
+          break
+        fi
+        sleep 5
+      done
+
+      if ! sudo /usr/local/bin/docker-compose version >/dev/null 2>&1; then
+        echo "docker-compose not available"
+        exit 1
+      fi
+      EOT
+    ]
+  }
+}
+
+
+data "aws_route53_zone" "link" {
+  name = var.domain_name
+}
+
+resource "aws_route53_record" "link_record" {
+  for_each = toset(["traefik", "keycloak", "vault", "kafka", "rabbit"])
+  name    = "${each.key}.${var.domain_name}"
+  zone_id = data.aws_route53_zone.link.zone_id
+  type    = "A"
+  ttl     = 60
+  records = [aws_eip.lab_eip.public_ip]
+}
+
+
+resource "terraform_data" "compose" {
+  depends_on = [terraform_data.deploy]
+  triggers_replace = [
+      filesha256("${path.module}/docker/docker-compose.yaml"),
+      filesha256("${path.module}/docker/traefik.yaml")
+
+  ]
+
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file(pathexpand("~/.ssh/aws-lab"))
+    host        = aws_eip.lab_eip.public_ip
+  }
+  provisioner "file" {
+    source      = "${path.module}/docker/docker-compose.yaml"
+    destination = "/home/ec2-user/docker-compose.yaml"
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/docker/traefik.yaml"
+    destination = "/home/ec2-user/traefik.yaml"
+  }
 }
