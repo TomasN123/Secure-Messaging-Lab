@@ -19,3 +19,45 @@ services:
       -  traefik.http.routers.whoami.tls.certresolver=myresolver
       -  traefik.http.routers.whoami.entrypoints=websecure
       -  traefik.enable=true
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    volumes:
+      - /data/postgres:/var/lib/postgresql/data
+      - ./initdb.sh:/docker-entrypoint-initdb.d/initdb.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - KEYCLOAK_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD}
+  keycloak:
+    image:  keycloak/keycloak:26.8
+    container_name: keycloak
+    command:  
+      - start
+    environment:
+      - KC_HOSTNAME=keycloak.cloud-telemetry.click
+      - KC_HTTP_ENABLED=true
+      - KC_PROXY_HEADERS=xforwarded
+      - KC_DB=postgres
+      - KC_DB_URL_HOST=postgres
+      - KC_DB_URL_DATABASE=keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD}
+      - KC_BOOTSTRAP_ADMIN_USERNAME=${KC_BOOTSTRAP_ADMIN_USERNAME}
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_BOOTSTRAP_ADMIN_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      -  traefik.http.routers.keycloak.rule=Host(`keycloak.cloud-telemetry.click`)
+      -  traefik.http.routers.keycloak.entrypoints=websecure
+      -  traefik.http.routers.keycloak.tls.certresolver=myresolver
+      -  traefik.enable=true
+      -  traefik.http.services.keycloak.loadbalancer.server.port=8080
+

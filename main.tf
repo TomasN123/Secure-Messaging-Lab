@@ -255,6 +255,7 @@ resource "terraform_data" "deploy" {
       "sudo mount -a",
 
       "sudo mkdir -p /data/traefik",
+      "sudo mkdir -p /data/postgres",
       "sudo chmod 700 /data/traefik",
 
       # Wait for Docker (max 5 minutes)
@@ -289,7 +290,9 @@ resource "terraform_data" "deploy" {
       EOT
     ]
   }
+
 }
+
 
 
 data "aws_route53_zone" "link" {
@@ -310,7 +313,9 @@ resource "terraform_data" "compose" {
   depends_on = [terraform_data.deploy]
   triggers_replace = [
       filesha256("${path.module}/docker/docker-compose.yaml"),
-      filesha256("${path.module}/docker/traefik.yaml")
+      filesha256("${path.module}/docker/traefik.yaml"),
+      filesha256("${path.module}/docker/.env"),
+      filesha256("${path.module}/docker/initdb.sh")
 
   ]
 
@@ -329,4 +334,38 @@ resource "terraform_data" "compose" {
     source      = "${path.module}/docker/traefik.yaml"
     destination = "/home/ec2-user/traefik.yaml"
   }
+
+  provisioner "file" {
+    source      = "${path.module}/docker/.env"
+    destination = "/home/ec2-user/.env"
+  }
+  provisioner "file" {
+    source      = "${path.module}/docker/initdb.sh"
+    destination = "/home/ec2-user/initdb.sh"
+  }
 }
+
+resource "terraform_data" "additional" {
+  triggers_replace = [
+    aws_instance.lab_ec2.id,
+    aws_volume_attachment.lab_ebs_attachment.id
+  ]
+  depends_on = [ terraform_data.compose ]
+
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file(pathexpand("~/.ssh/aws-lab"))
+    host        = aws_eip.lab_eip.public_ip
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo chown ec2-user:ec2-user /home/ec2-user/.env",
+      "sudo chmod 600 /home/ec2-user/.env",
+      "sudo usermod -aG docker ec2-user"
+    ]
+  }
+
+}
+
