@@ -10,6 +10,7 @@ services:
       - ./traefik.yaml:/etc/traefik/traefik.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /data/traefik:/acme
+    restart: unless-stopped
 
   whoami:
     image: traefik/whoami:latest
@@ -19,6 +20,7 @@ services:
       -  traefik.http.routers.whoami.tls.certresolver=myresolver
       -  traefik.http.routers.whoami.entrypoints=websecure
       -  traefik.enable=true
+    restart: unless-stopped
   postgres:
     image: postgres:16
     container_name: postgres
@@ -35,19 +37,20 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - KEYCLOAK_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD}
+    restart: unless-stopped
   keycloak:
     image:  keycloak/keycloak:26.8
     container_name: keycloak
     command:  
       - start
     environment:
-      - KC_HOSTNAME=keycloak.cloud-telemetry.click
-      - KC_HTTP_ENABLED=true
-      - KC_PROXY_HEADERS=xforwarded
-      - KC_DB=postgres
-      - KC_DB_URL_HOST=postgres
-      - KC_DB_URL_DATABASE=keycloak
-      - KC_DB_USERNAME=keycloak
+      - KC_HOSTNAME=keycloak.cloud-telemetry.click       # Public URL
+      - KC_HTTP_ENABLED=true                             # Allow HTTP, behind traefik is no TLS/HTTPS anymore
+      - KC_PROXY_HEADERS=xforwarded                      # Trust X-Forwarded-* from Traefik 
+      - KC_DB=postgres                                   # DB type 
+      - KC_DB_URL_HOST=postgres                          # docker-compose service name of Postgres
+      - KC_DB_URL_DATABASE=keycloak                      # DB created in initdb.sh
+      - KC_DB_USERNAME=keycloak                          # Role created in initdb.sh
       - KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD}
       - KC_BOOTSTRAP_ADMIN_USERNAME=${KC_BOOTSTRAP_ADMIN_USERNAME}
       - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_BOOTSTRAP_ADMIN_PASSWORD}
@@ -59,5 +62,24 @@ services:
       -  traefik.http.routers.keycloak.entrypoints=websecure
       -  traefik.http.routers.keycloak.tls.certresolver=myresolver
       -  traefik.enable=true
-      -  traefik.http.services.keycloak.loadbalancer.server.port=8080
+      -  traefik.http.services.keycloak.loadbalancer.server.port=8080   
+    restart: unless-stopped
 
+  vault:
+    image: hashicorp/vault:2.2
+    container_name: vault
+    command: 
+      -  server
+    restart: unless-stopped
+    cap_add: 
+      -  IPC_LOCK
+    labels:
+      -  traefik.http.routers.vault.rule=Host(`vault.cloud-telemetry.click`)
+      -  traefik.http.routers.vault.tls.certresolver=myresolver
+      -  traefik.http.routers.vault.entrypoints=websecure
+      -  traefik.enable=true
+      -  traefik.http.services.vault.loadbalancer.server.port=8200
+    volumes:
+      -  ./vault.hcl:/vault/config/vault.hcl:ro
+      -  /data/vault:/vault/file
+      -  /data/vault-audit:/vault/logs
