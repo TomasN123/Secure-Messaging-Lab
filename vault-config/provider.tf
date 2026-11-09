@@ -23,6 +23,6 @@ terraform {
 }
 
 provider "vault" {
-  address          = "https://vault.cloud-telemetry.click"
-  skip_tls_verify  = true # TEMPORARY: remove when ACME is on production
+  address = "https://vault.cloud-telemetry.click"
+  #  skip_tls_verify  = true # TEMPORARY: remove when ACME is on production
 }
