@@ -83,3 +83,41 @@ services:
       -  ./vault.hcl:/vault/config/vault.hcl:ro
       -  /data/vault:/vault/file
       -  /data/vault-audit:/vault/logs
+  rabbit:
+    image: rabbitmq:4.4.0-management-alpine
+    container_name: rabbit
+    hostname: rabbit
+    profiles:
+      - rabbit
+    volumes:
+      - /data/rabbitmq:/var/lib/rabbitmq
+    labels:
+      -  traefik.http.routers.rabbit.rule=Host(`rabbit.cloud-telemetry.click`)
+      -  traefik.http.routers.rabbit.tls.certresolver=myresolver
+      -  traefik.http.routers.rabbit.entrypoints=websecure
+      -  traefik.enable=true
+      -  traefik.http.services.rabbit.loadbalancer.server.port=15672
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 45s      
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+
+  vault-agent:
+    image: hashicorp/vault:2.2
+    container_name: vault-agent
+    command: 
+      - vault
+      - agent
+      - -config=/vault/config/vault-agent.hcl
+    volumes:
+      - ./vault-agent.hcl:/vault/config/vault-agent.hcl:ro
+      -  /data/agent-secrets:/vault/secrets
+    restart: unless-stopped
+    profiles:
+      - rabbit

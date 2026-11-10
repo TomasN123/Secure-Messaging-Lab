@@ -161,5 +161,107 @@ path "sys/audit" {
   capabilities = ["read", "sudo"]
 }
 
+path "rabbitmq/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+
+path "sys/leases/lookup/*" {
+  capabilities = ["update", "list", "sudo"]
+}
+
+path "sys/leases/revoke/*" {
+  capabilities = ["update", "sudo"]
+}
+
+path "auth/approle/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+
 EOT
 }
+
+resource "vault_rabbitmq_secret_backend" "rabbitmq" {
+  connection_uri       = "http://rabbit:15672" #vault call via API internal network not traefik
+  path = "rabbitmq"
+  username             = "vault_rabbit_user"
+  password          = var.rabbitmq_password
+  default_lease_ttl_seconds = 3600
+  max_lease_ttl_seconds = 14400
+}
+
+resource "vault_rabbitmq_secret_backend_role" "simulator" {
+  backend = vault_rabbitmq_secret_backend.rabbitmq.path
+  name    = "simulator"
+
+  tags = ""
+
+  vhost {
+    host = "/"
+    configure = "^$"
+    read = "^$"
+    write = "^plant\\..*"
+  }
+
+}
+resource "vault_rabbitmq_secret_backend_role" "consumer" {
+  backend = vault_rabbitmq_secret_backend.rabbitmq.path
+  name    = "consumer"
+
+  tags = ""
+
+  vhost {
+    host = "/"
+    configure = "^plant\\..*"
+    read = "^plant\\..*"
+    write = "^plant\\..*"
+  }
+}
+
+
+    resource "vault_policy" "simulator" {
+    name = "simulator"
+
+    policy = <<EOT
+    path "rabbitmq/creds/simulator" {
+    capabilities = ["read"]
+    }
+    EOT
+    }
+
+    resource "vault_policy" "consumer" {
+    name = "consumer"
+
+    policy = <<EOT
+    path "rabbitmq/creds/consumer" {
+    capabilities = ["read"]
+    }
+    EOT
+    }
+
+
+    resource "vault_auth_backend" "lab_approle" {
+    type = "approle"
+    path = "approle"
+    }
+
+    resource "vault_approle_auth_backend_role" "lab_approle_auth_simulator" {
+    backend        = vault_auth_backend.lab_approle.path
+    role_name      = "simulator"
+    token_policies = [vault_policy.simulator.name]
+    secret_id_ttl = 86400
+    secret_id_num_uses = 0
+    token_ttl = 3600
+    token_max_ttl = 14400
+    token_num_uses = 0
+    }
+
+    resource "vault_approle_auth_backend_role" "lab_approle_auth_consumer" {
+    backend        = vault_auth_backend.lab_approle.path
+    role_name      = "consumer"
+    token_policies = [vault_policy.consumer.name]
+    secret_id_ttl = 86400
+    secret_id_num_uses = 0
+    token_ttl = 3600
+    token_max_ttl = 14400
+    token_num_uses = 0
+    }

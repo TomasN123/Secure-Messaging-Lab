@@ -258,8 +258,12 @@ resource "terraform_data" "deploy" {
       "sudo mkdir -p /data/postgres",
       "sudo mkdir -p /data/vault",
       "sudo mkdir -p /data/vault-audit",
+      "sudo mkdir -p /data/rabbitmq",
+      "sudo mkdir -p /data/agent-secrets",
       "sudo chown 100:1000 /data/vault",
       "sudo chown 100:1000 /data/vault-audit",
+      "sudo chown 100:101 /data/rabbitmq",
+      "sudo chown 100:1000 /data/agent-secrets",
       "sudo chmod 700 /data/traefik",
 
       # Wait for Docker (max 5 minutes)
@@ -323,6 +327,8 @@ resource "terraform_data" "compose" {
     filesha256("${path.module}/docker/.env"),
     filesha256("${path.module}/docker/initdb.sh"),
     filesha256("${path.module}/docker/vault.hcl"),
+    filesha256("${path.module}/docker/vault-agent.hcl"),
+
     terraform_data.deploy.id
 
   ]
@@ -355,6 +361,11 @@ resource "terraform_data" "compose" {
     source      = "${path.module}/docker/vault.hcl"
     destination = "/home/ec2-user/vault.hcl"
   }  
+  provisioner "file" {
+    source      = "${path.module}/docker/vault-agent.hcl"
+    destination = "/home/ec2-user/vault-agent.hcl"
+  }  
+
 
   provisioner "remote-exec" {
     inline = [
