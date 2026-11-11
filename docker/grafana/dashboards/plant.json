@@ -1,0 +1,83 @@
+{
+  "uid": "plant-rabbit",
+  "title": "Plant messaging (RabbitMQ)",
+  "tags": ["plant"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "timezone": "browser",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    { "id": 1, "type": "stat", "title": "AMQP connections",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rabbitmq_connections" } ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" } },
+
+    { "id": 2, "type": "stat", "title": "Messages sent per second",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(sim_messages_sent_total[1m]))" } ],
+      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" } },
+
+    { "id": 3, "type": "stat", "title": "Dropped messages (last 5 min)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(increase(sim_messages_dropped_total[5m])) or vector(0)" } ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0,
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" } },
+
+    { "id": 4, "type": "stat", "title": "Latency p95",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (le) (rate(cons_latency_seconds_bucket[1m])))" } ],
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 3 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" } },
+
+    { "id": 5, "type": "timeseries", "title": "Message flow: sent vs received",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(sim_messages_sent_total[1m]))", "legendFormat": "sent (simulator)" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(cons_messages_received_total[1m]))", "legendFormat": "received (consumer)" } ],
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] } },
+
+    { "id": 6, "type": "timeseries", "title": "Latency p50 / p95",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.5, sum by (le) (rate(cons_latency_seconds_bucket[1m])))", "legendFormat": "p50" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (le) (rate(cons_latency_seconds_bucket[1m])))", "legendFormat": "p95" } ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] } },
+
+    { "id": 7, "type": "timeseries", "title": "Delivery problems: dropped, gaps, duplicates",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(sim_messages_dropped_total[1m])) or vector(0)", "legendFormat": "dropped (publish failed)" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rate(cons_gaps_total[1m])", "legendFormat": "gaps (missing seq)" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rate(cons_duplicates_total[1m])", "legendFormat": "duplicates" } ],
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] } },
+
+    { "id": 8, "type": "timeseries", "title": "Messages waiting in queues",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rabbitmq_queue_messages", "legendFormat": "all queues" } ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] } },
+
+    { "id": 9, "type": "timeseries", "title": "Account rotation (new Vault account seen, per 5 min)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "increase(broker_account_rotations_total[5m])", "legendFormat": "{{job}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] } },
+
+    { "id": 10, "type": "timeseries", "title": "MES commands received by machines",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (command) (rate(sim_commands_received_total[1m]))", "legendFormat": "{{command}}" } ],
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] } }
+  ]
+}
