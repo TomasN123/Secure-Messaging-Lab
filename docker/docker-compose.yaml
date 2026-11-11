@@ -121,3 +121,82 @@ services:
     restart: unless-stopped
     profiles:
       - rabbit
+  vault-agent-consumer:
+    image: hashicorp/vault:2.2
+    container_name: vault-agent-consumer
+    command: 
+      - vault
+      - agent
+      - -config=/vault/config/vault-agent-consumer.hcl
+    volumes:
+      - ./vault-agent-consumer.hcl:/vault/config/vault-agent-consumer.hcl:ro
+      -  /data/agent-secrets-consumer:/vault/secrets
+    restart: unless-stopped
+    profiles:
+      - rabbit
+  consumer:
+    build: ./apps
+    container_name: consumer
+    profiles:
+      - rabbit
+    restart: unless-stopped
+    command: 
+      -  python
+      -  consumer.py
+    environment:
+      - BROKER=rabbit
+      - RABBITMQ_HOST=rabbit
+      - CREDENTIALS_FILE=/vault/secrets/rabbit.env
+    volumes:
+      -  /data/agent-secrets-consumer:/vault/secrets:ro
+    depends_on:
+      rabbit:
+        condition: service_healthy
+  simulator:
+    build: ./apps
+    container_name: simulator
+    profiles:
+      - rabbit
+    restart: unless-stopped
+    command: 
+      -  python
+      -  simulator.py
+    environment:
+      - BROKER=rabbit
+      - RABBITMQ_HOST=rabbit
+      - CREDENTIALS_FILE=/vault/secrets/rabbit.env
+    volumes:
+      -  /data/agent-secrets:/vault/secrets:ro
+    depends_on:
+      consumer:
+        condition: service_started
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v3.16.0
+    restart: unless-stopped
+    profiles:
+      - rabbit
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /data/prometheus:/prometheus
+  grafana:
+    image: grafana/grafana:13.1
+    container_name: grafana
+    restart: unless-stopped
+    profiles:
+      - rabbit
+    labels:
+      -  traefik.http.routers.grafana.rule=Host(`grafana.cloud-telemetry.click`)
+      -  traefik.http.routers.grafana.entrypoints=websecure
+      -  traefik.http.routers.grafana.tls.certresolver=myresolver
+      -  traefik.enable=true
+      -  traefik.http.services.grafana.loadbalancer.server.port=3000
+    volumes:
+      -  /data/grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/dashboards:ro
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}

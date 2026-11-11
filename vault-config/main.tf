@@ -185,8 +185,8 @@ resource "vault_rabbitmq_secret_backend" "rabbitmq" {
   path = "rabbitmq"
   username             = "vault_rabbit_user"
   password          = var.rabbitmq_password
-  default_lease_ttl_seconds = 3600
-  max_lease_ttl_seconds = 14400
+  default_lease_ttl_seconds = 60
+  max_lease_ttl_seconds = 120
 }
 
 resource "vault_rabbitmq_secret_backend_role" "simulator" {
@@ -198,7 +198,7 @@ resource "vault_rabbitmq_secret_backend_role" "simulator" {
   vhost {
     host = "/"
     configure = "^$"
-    read = "^$"
+    read = "^plant\\.cmd\\..*"
     write = "^plant\\..*"
   }
 
@@ -250,8 +250,7 @@ resource "vault_rabbitmq_secret_backend_role" "consumer" {
     token_policies = [vault_policy.simulator.name]
     secret_id_ttl = 86400
     secret_id_num_uses = 0
-    token_ttl = 3600
-    token_max_ttl = 14400
+    token_period = 120
     token_num_uses = 0
     }
 
@@ -261,7 +260,6 @@ resource "vault_rabbitmq_secret_backend_role" "consumer" {
     token_policies = [vault_policy.consumer.name]
     secret_id_ttl = 86400
     secret_id_num_uses = 0
-    token_ttl = 3600
-    token_max_ttl = 14400
+    token_period = 120
     token_num_uses = 0
     }

@@ -260,10 +260,18 @@ resource "terraform_data" "deploy" {
       "sudo mkdir -p /data/vault-audit",
       "sudo mkdir -p /data/rabbitmq",
       "sudo mkdir -p /data/agent-secrets",
+      "sudo mkdir -p /data/agent-secrets-consumer",
+      "sudo mkdir -p /data/prometheus",
+      "sudo mkdir -p /data/grafana",
+      "mkdir -p /home/ec2-user/apps",
+      "mkdir -p /home/ec2-user/grafana",
       "sudo chown 100:1000 /data/vault",
       "sudo chown 100:1000 /data/vault-audit",
       "sudo chown 100:101 /data/rabbitmq",
       "sudo chown 100:1000 /data/agent-secrets",
+      "sudo chown 100:1000 /data/agent-secrets-consumer",
+      "sudo chown 65534:65534 /data/prometheus",
+      "sudo chown 472:0 /data/grafana",
       "sudo chmod 700 /data/traefik",
 
       # Wait for Docker (max 5 minutes)
@@ -297,6 +305,23 @@ resource "terraform_data" "deploy" {
       fi
       EOT
       ,
+      <<-EOT
+      PLUGIN_DIR=/usr/local/lib/docker/cli-plugins
+      VER=v0.38.2
+      BASE=https://github.com/docker/buildx/releases/download/$VER
+      sudo mkdir -p $PLUGIN_DIR
+      sudo curl -fsSL $BASE/buildx-$VER.linux-amd64 -o $PLUGIN_DIR/docker-buildx
+      curl -fsSL $BASE/checksums.txt -o /tmp/buildx-checksums.txt
+      EXPECTED=$(grep "buildx-$VER.linux-amd64$" /tmp/buildx-checksums.txt | awk '{print $1}')
+      ACTUAL=$(sha256sum $PLUGIN_DIR/docker-buildx | awk '{print $1}')
+      if [ -z "$EXPECTED" ] || [ "$EXPECTED" != "$ACTUAL" ]; then
+        echo "buildx checksum mismatch"
+        exit 1
+      fi
+      sudo chmod +x $PLUGIN_DIR/docker-buildx
+      sudo docker buildx version
+      EOT
+      ,
       "sudo usermod -aG docker ec2-user"
     ]
   }
@@ -310,7 +335,7 @@ data "aws_route53_zone" "link" {
 }
 
 resource "aws_route53_record" "link_record" {
-  for_each = toset(["traefik", "keycloak", "vault", "kafka", "rabbit"])
+  for_each = toset(["traefik", "keycloak", "vault", "kafka", "rabbit", "grafana"])
   name     = "${each.key}.${var.domain_name}"
   zone_id  = data.aws_route53_zone.link.zone_id
   type     = "A"
@@ -328,7 +353,10 @@ resource "terraform_data" "compose" {
     filesha256("${path.module}/docker/initdb.sh"),
     filesha256("${path.module}/docker/vault.hcl"),
     filesha256("${path.module}/docker/vault-agent.hcl"),
-
+    sha256(join("", [for f in sort(fileset("${path.module}/apps", "**")) : "${f}:${filesha256("${path.module}/apps/${f}")}"])),
+    filesha256("${path.module}/docker/vault-agent-consumer.hcl"),
+    filesha256("${path.module}/docker/prometheus.yml"),
+    sha256(join("", [for f in sort(fileset("${path.module}/docker/grafana", "**")) : "${f}:${filesha256("${path.module}/docker/grafana/${f}")}"])),
     terraform_data.deploy.id
 
   ]
@@ -365,7 +393,22 @@ resource "terraform_data" "compose" {
     source      = "${path.module}/docker/vault-agent.hcl"
     destination = "/home/ec2-user/vault-agent.hcl"
   }  
-
+  provisioner "file" {
+    source      = "${path.module}/apps/"
+    destination = "/home/ec2-user/apps"
+  }  
+  provisioner "file" {
+    source      = "${path.module}/docker/vault-agent-consumer.hcl"
+    destination = "/home/ec2-user/vault-agent-consumer.hcl"
+  }  
+  provisioner "file" {
+    source      = "${path.module}/docker/prometheus.yml"
+    destination = "/home/ec2-user/prometheus.yml"
+  }  
+  provisioner "file" {
+    source      = "${path.module}/docker/grafana/"
+    destination = "/home/ec2-user/grafana"
+  } 
 
   provisioner "remote-exec" {
     inline = [
