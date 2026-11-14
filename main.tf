@@ -345,7 +345,7 @@ resource "aws_route53_record" "link_record" {
 
 
 resource "terraform_data" "compose" {
-  depends_on = [terraform_data.deploy]
+  depends_on = [terraform_data.deploy, aws_route53_record.link_record]
   triggers_replace = [
     filesha256("${path.module}/docker/docker-compose.yaml"),
     filesha256("${path.module}/docker/traefik.yaml"),
@@ -388,27 +388,27 @@ resource "terraform_data" "compose" {
   provisioner "file" {
     source      = "${path.module}/docker/vault.hcl"
     destination = "/home/ec2-user/vault.hcl"
-  }  
+  }
   provisioner "file" {
     source      = "${path.module}/docker/vault-agent.hcl"
     destination = "/home/ec2-user/vault-agent.hcl"
-  }  
+  }
   provisioner "file" {
     source      = "${path.module}/apps/"
     destination = "/home/ec2-user/apps"
-  }  
+  }
   provisioner "file" {
     source      = "${path.module}/docker/vault-agent-consumer.hcl"
     destination = "/home/ec2-user/vault-agent-consumer.hcl"
-  }  
+  }
   provisioner "file" {
     source      = "${path.module}/docker/prometheus.yml"
     destination = "/home/ec2-user/prometheus.yml"
-  }  
+  }
   provisioner "file" {
     source      = "${path.module}/docker/grafana/"
     destination = "/home/ec2-user/grafana"
-  } 
+  }
 
   provisioner "remote-exec" {
     inline = [
